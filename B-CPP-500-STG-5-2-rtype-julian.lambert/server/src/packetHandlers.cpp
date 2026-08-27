@@ -52,17 +52,22 @@ namespace rtype {
         exng::logger::log() << "Received connection request from " << client.address << ":" << client.port;
 
         if (server.isNewClient(client.address, client.port)) {
+            // refuse before creating anything, otherwise the player entity
+            // would linger forever for a client that never joined
+            if (m_udpServer.getNbClients() >= MAX_PLAYERS) {
+                exng::net::Packet refusal;
+                refusal << MessageType::ConnectionRefused;
+                server.reliableSendPacket(refusal, client);
+                exng::logger::error() << "Client " << client.address << ":" << client.port
+                                      << " connection refused (server full)";
+                return;
+            }
+
             // add a new player entity in the coordinator
             exng::Entity newPlayer = constructors::createPlayer(m_coordinator, client.address, client.port, m_playerNumber++);
             exng::net::Packet response;
-            // if the connection is successful, send a packet to all clients to notify them of the new connection
-            bool success = true; // TODO: check if the connection is successful (like if the game is full or something)
 
-            if (m_udpServer.getNbClients() >= MAX_PLAYERS) {
-                success = false;
-            }
-
-            if (success) {
+            {
                 // notify all clients of the new player
                 server.addClient(client.address, client.port);
 
@@ -94,10 +99,6 @@ namespace rtype {
                         server.reliableSendPacket(existingPlayerPacket, client);
                     }
                 }
-            } else {
-                response << MessageType::ConnectionRefused;
-                server.reliableSendPacket(response, client);
-                exng::logger::error() << "Client " << client.address << ":" << client.port << " connection refused";
             }
         }
     }

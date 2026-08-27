@@ -10,6 +10,7 @@
 #include <any>
 
 #include "helper/info/logger.hpp"
+#include "helper/paths.hpp"
 
 namespace exng
 {
@@ -33,14 +34,26 @@ namespace exng
 
             void load(const std::string& path)
             {
-                std::ifstream file(path);
+                // the config file lives next to the game, not necessarily in
+                // the current working directory
+                std::string resolved = paths::resolve(path);
+
+                std::ifstream file(resolved);
                 if (!file.is_open()) {
+                    exng::logger::warn() << "No config file at " << resolved << ", writing the default one";
                     m_settings = m_defaultSettings;
-                    save(path);
+                    save(resolved);
                     return;
                 }
 
-                file >> m_settings;
+                try {
+                    file >> m_settings;
+                } catch (const std::exception& e) {
+                    exng::logger::error() << "Invalid config file (" << resolved << "): " << e.what()
+                                          << " -- falling back to the default settings";
+                    m_settings = m_defaultSettings;
+                    return;
+                }
 
                 // check if all default settings are present
                 for (auto& [key, value] : m_defaultSettings.items()) {

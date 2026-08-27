@@ -18,6 +18,8 @@ namespace rtype {
     void scene::MainMenu::handleConnectionRefused(exng::net::Packet &packet, exng::net::UDPClient &client) {
         exng::logger::error() << "Connection refused";
         m_UDPclient.setConnected(false);
+        // read back by update(), which owns the GUI
+        m_status = Status::Refused;
     }
 
     void scene::MainMenu::handleConnectionAccepted(exng::net::Packet &packet, exng::net::UDPClient &client) {
@@ -54,8 +56,10 @@ namespace rtype {
     }
 
     void scene::Game::handleServerStopped(exng::net::Packet &packet, exng::net::UDPClient &client) {
-        exng::logger::error() << "Lost connection to server, server stopped, closing client";
+        exng::logger::error() << "Lost connection to server, the server stopped";
         m_UDPclient.setConnected(false);
+        // handled by update(), on the game thread
+        m_serverStopped = true;
     }
 
     void scene::Game::handleEntityPositionUpdate(exng::net::Packet &packet, exng::net::UDPClient &client) {
@@ -126,7 +130,7 @@ namespace rtype {
         }
 
         // if the disconnected entity is the player, disconnect from the server
-        if (entityId == *m_playerClientId) {
+        if (m_playerClientId && entityId == *m_playerClientId) {
             m_UDPclient.setConnected(false);
         }
     }

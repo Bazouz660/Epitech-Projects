@@ -249,8 +249,9 @@ namespace exng::net {
 
     void UDPClient::setConnected(bool connected)
     {
+        // m_binded is only about the socket being usable: clearing it here
+        // would drop the goodbye packet that disconnect() just queued
         m_connected = connected;
-        m_binded = connected;
     }
 
     void UDPClient::disconnect(uint8_t messageType)

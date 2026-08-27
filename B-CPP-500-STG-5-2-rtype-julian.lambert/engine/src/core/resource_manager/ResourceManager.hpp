@@ -21,6 +21,7 @@
 #include "parsing.hpp"
 #include "logger.hpp"
 #include "MusicManager.hpp"
+#include "helper/paths.hpp"
 
 namespace exng {
 
@@ -95,17 +96,18 @@ namespace exng {
 
             static void loadFromFolder(const ResourceType& type, const std::string& folderPath, bool recursive = false)
             {
-                std::filesystem::path path(folderPath);
-                std::string directoryName = path.filename().string();
+                // folderPath is given relative to the game root, which is not
+                // necessarily the current working directory
+                std::string resolved = paths::resolve(folderPath);
 
                 // check if the folder exists
-                if (!std::filesystem::exists(folderPath)) {
-                    logger::error("Resource folder not found: " + folderPath);
+                if (!std::filesystem::exists(resolved)) {
+                    logger::error("Resource folder not found: " + resolved);
                     return;
                 }
 
                 // iterate over the directory
-                for (const auto& entry : std::filesystem::directory_iterator(folderPath)) {
+                for (const auto& entry : std::filesystem::directory_iterator(resolved)) {
                     // if the entry is a directory and recursive is true, load textures from it
 
                     if (std::filesystem::is_directory(entry) && recursive) {
@@ -132,17 +134,26 @@ namespace exng {
                 m_loadingThreads.resize(m_threadCount);
                 for (auto& thread : m_loadingThreads) {
                     thread = std::thread([this]() {
-                        std::unique_lock<std::mutex> lock(m_mutex);
                         while (true) {
-                            m_condVar.wait(lock, [this]() { return !m_loadingTasks.empty() || m_shouldClose; });
-                            if (m_shouldClose && m_loadingTasks.empty()) {
-                                return;
+                            std::function<bool()> task;
+                            {
+                                std::unique_lock<std::mutex> lock(m_mutex);
+                                m_condVar.wait(lock, [this]() { return !m_loadingTasks.empty() || m_shouldClose; });
+                                if (m_loadingTasks.empty()) {
+                                    if (m_shouldClose)
+                                        return;
+                                    continue;
+                                }
+                                task = std::move(m_loadingTasks.front());
+                                m_loadingTasks.pop();
                             }
-                            m_loadingTasks.front()();
-                            m_loadingTasks.pop();
-                            if (m_loadingTasks.empty()) {
+
+                            // run outside of the queue lock, so that new
+                            // resources can be queued while one is loading
+                            task();
+
+                            if (--m_pendingTasks == 0)
                                 m_isLoading = false;
-                            }
                         }
                     });
                 }
@@ -172,12 +183,22 @@ namespace exng {
             {
                 ResourceManager& instance = getInstance();
                 instance.m_isLoading = true;
+                ++instance.m_pendingTasks;
 
-                instance.m_loadingTasks.push([filePath]() {
+                std::string resolvedPath = paths::resolve(filePath);
+
+                auto task = [resolvedPath]() {
+                    ResourceManager& instance = getInstance();
+
+                    // One resource at a time: the maps, the MusicManager and
+                    // SFML's shared OpenGL context are all common to every
+                    // loading thread.
+                    std::lock_guard<std::mutex> lock(instance.m_resourceMutex);
+
                     auto& map = getMap<T>();
+                    const std::string& filePath = resolvedPath;
                     std::filesystem::path path(filePath);
                     std::string noExtensionName = parsing::removeExtension(path.filename().string());
-                    std::string directory = path.parent_path().string();
                     std::string directoryName = path.parent_path().filename().string();
 
                     int status = 0;
@@ -206,7 +227,14 @@ namespace exng {
 
                     logger::success("Loaded resource: " + filePath);
                     return true;
-                });
+                };
+
+                {
+                    // the queue is consumed by the worker threads: it must not
+                    // be touched without holding the mutex
+                    std::lock_guard<std::mutex> lock(instance.m_mutex);
+                    instance.m_loadingTasks.push(std::move(task));
+                }
 
                 instance.m_condVar.notify_one();
             }
@@ -307,8 +335,10 @@ namespace exng {
             std::vector<std::thread> m_loadingThreads;
             unsigned int m_threadCount;
             std::atomic<bool> m_isLoading;
+            std::atomic<unsigned int> m_pendingTasks{0};
             std::condition_variable m_condVar;
-            std::mutex m_mutex;
+            std::mutex m_mutex;          // guards m_loadingTasks
+            std::mutex m_resourceMutex;  // serialises the loading tasks
 
             ResourceMultimap<sf::Texture> m_textures;
             ResourceMultimap<sf::Font> m_fonts;

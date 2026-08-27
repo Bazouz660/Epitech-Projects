@@ -70,6 +70,17 @@ namespace exng::gui
         sf::Text &getText();
 
         /**
+         * @brief Remplace le texte affiché.
+         */
+        void setString(const std::string &text);
+
+        /**
+         * @brief Recentre l'origine sur le texte, pour pouvoir le positionner
+         *        par son centre.
+         */
+        void centerOrigin();
+
+        /**
          * @brief Méthode pour définir la position de l'étiquette.
          *
          * @param position La nouvelle position de l'étiquette.

@@ -99,4 +99,10 @@ namespace exng::gui
     {
         return m_inputString.toAnsiString();
     }
+
+    void InputBox::setInputString(const std::string &value)
+    {
+        m_inputString = value;
+        m_input.setString(m_inputString);
+    }
 }

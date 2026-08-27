@@ -11,26 +11,54 @@
 #include "core/window/Window.hpp"
 #include "core/window/view/View.hpp"
 
+#include <atomic>
+
 namespace exng
 {
     namespace context
     {
-        static Vector2u targetResolution = {1920, 1080};
+        // `inline` matters here: with a plain `static` every translation unit
+        // would get its own copy, so a resolution set from main() would not be
+        // visible from the scenes.
+        inline Vector2u targetResolution = {1920, 1080};
+        inline std::atomic<bool> quitRequested = false;
+        inline std::atomic<bool> fullscreenToggleRequested = false;
 
-        static void setTargetResolution(const Vector2u& resolution)
+        inline void setTargetResolution(const Vector2u& resolution)
         {
             targetResolution = resolution;
         }
 
-        static void setTargetResolution(unsigned int x, unsigned int y)
+        inline void setTargetResolution(unsigned int x, unsigned int y)
         {
             targetResolution = {x, y};
         }
 
-        static Vector2u getTargetResolution()
+        inline Vector2u getTargetResolution()
         {
             return targetResolution;
         }
 
+        // The GUI has no handle on the window: these let a scene ask the main
+        // loop to shut down or to switch display mode.
+        inline void requestQuit()
+        {
+            quitRequested = true;
+        }
+
+        inline bool isQuitRequested()
+        {
+            return quitRequested;
+        }
+
+        inline void requestFullscreenToggle()
+        {
+            fullscreenToggleRequested = true;
+        }
+
+        inline bool consumeFullscreenToggle()
+        {
+            return fullscreenToggleRequested.exchange(false);
+        }
     }
 }

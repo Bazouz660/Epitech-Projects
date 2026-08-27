@@ -41,6 +41,11 @@ namespace exng::gui
 
         sf::Text &getInput();
         std::string getInputString() const;
+
+        // Pre-fill the box with a value the user can edit (and that
+        // getInputString() will return), as opposed to the constructor's
+        // argument which is only a placeholder.
+        void setInputString(const std::string &value);
         virtual void setPosition(const sf::Vector2f&) override;
     };
 }

@@ -11,6 +11,7 @@
 #include "scenes/SplashScreen.hpp"
 #include "core/resource_manager/ResourceManager.hpp"
 #include "helper/info/context.hpp"
+#include "helper/paths.hpp"
 
 namespace rtype {
 
@@ -47,7 +48,6 @@ namespace rtype {
     {
         m_netClientThread = std::thread([this]() {
 
-            float pingTimer = 0;
             exng::Chrono chrono;
 
             while (!m_shouldClose || m_UDPclient.isConnected()) {
@@ -69,6 +69,10 @@ namespace rtype {
                 }
 
                 m_tickTimer += chrono.getFrameDt().asSeconds();
+
+                // the socket is non blocking: without this the thread would
+                // spin at 100% of a core for nothing
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
 
             exng::logger::log() << "Closing network thread";
@@ -77,7 +81,8 @@ namespace rtype {
 
     void RTypeClient::runGame()
     {
-        m_window.create("Rtype", exng::context::getTargetResolution(), false);
+        m_window.create("R-Type", exng::context::getTargetResolution(), false);
+        m_window.setIcon(exng::paths::resolve("asset/icon/youpiLogo.png"));
         m_window.setFramerateLimit(60);
 
         while (m_window.isOpen() && !m_shouldClose) {
@@ -88,13 +93,31 @@ namespace rtype {
             // process events
             while (m_window.pollEvent(m_event)) {
                 if (m_event.type == sf::Event::Closed) {
-                    m_window.close();
-                    m_UDPclient.disconnect(rtype::MessageType::DisconnectionRequest);
-                    m_shouldClose = true;
+                    requestClose();
+                    break;
                 }
+
+                if (m_event.type == sf::Event::KeyPressed && m_event.key.code == sf::Keyboard::F11) {
+                    m_window.setFullscreen(!m_window.isFullscreen());
+                    continue;
+                }
+
+                // the window is not necessarily the size the game draws at:
+                // bring mouse coordinates back into the game referential so
+                // that the GUI hit tests stay correct
+                remapMouseCoordinates(m_event);
 
                 m_sceneManager.getCurrentScene()->processEvents(m_event);
             }
+
+            if (exng::context::consumeFullscreenToggle())
+                m_window.setFullscreen(!m_window.isFullscreen());
+
+            if (exng::context::isQuitRequested())
+                requestClose();
+
+            if (!m_window.isOpen() || m_shouldClose)
+                break;
 
             // update
             m_sceneManager.getCurrentScene()->update(m_logicChrono.getFrameDt().asSeconds());
@@ -113,6 +136,43 @@ namespace rtype {
             m_netClientThread.join();
 
         exng::logger::log() << "Closing window";
+    }
+
+    void RTypeClient::requestClose()
+    {
+        if (m_shouldClose)
+            return;
+
+        m_UDPclient.disconnect(rtype::MessageType::DisconnectionRequest);
+        m_shouldClose = true;
+        m_window.close();
+    }
+
+    void RTypeClient::remapMouseCoordinates(sf::Event &event)
+    {
+        switch (event.type) {
+            case sf::Event::MouseMoved: {
+                auto coords = m_window.mapPixelToCoords(event.mouseMove.x, event.mouseMove.y);
+                event.mouseMove.x = static_cast<int>(coords.x);
+                event.mouseMove.y = static_cast<int>(coords.y);
+                break;
+            }
+            case sf::Event::MouseButtonPressed:
+            case sf::Event::MouseButtonReleased: {
+                auto coords = m_window.mapPixelToCoords(event.mouseButton.x, event.mouseButton.y);
+                event.mouseButton.x = static_cast<int>(coords.x);
+                event.mouseButton.y = static_cast<int>(coords.y);
+                break;
+            }
+            case sf::Event::MouseWheelScrolled: {
+                auto coords = m_window.mapPixelToCoords(event.mouseWheelScroll.x, event.mouseWheelScroll.y);
+                event.mouseWheelScroll.x = static_cast<int>(coords.x);
+                event.mouseWheelScroll.y = static_cast<int>(coords.y);
+                break;
+            }
+            default:
+                break;
+        }
     }
 
 }

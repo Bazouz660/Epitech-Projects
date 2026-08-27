@@ -47,9 +47,16 @@ namespace rtype::scene {
 
         private:
             void createGUI();
+            void createGameOverGUI();
 
-            std::atomic<int> m_playerHp;
-            std::atomic<int> m_playerMaxHp;
+            // leaves the server and goes back to the main menu
+            void backToMenu();
+
+            // health of the local player, fed by the PlayerInfo packets.
+            // maxHp starts at 1 so that the life bar ratio is never a division
+            // by zero before the first packet arrives.
+            std::atomic<int> m_playerHp = 0;
+            std::atomic<int> m_playerMaxHp = 1;
 
             std::shared_ptr<sys::UpdateTransform> m_transformSystem;
             std::shared_ptr<sys::RenderSystem> m_renderSystem;
@@ -62,6 +69,10 @@ namespace rtype::scene {
             exng::SafeUnorderedMap<exng::Entity, exng::Entity> m_clientToServerEntities;
 
             exng::gui::Container m_guiContainer;
+            exng::gui::Container m_gameOverContainer;
+
+            // reason shown on the end screen
+            std::atomic<bool> m_serverStopped = false;
 
             exng::gui::LayerBackground m_background;
 

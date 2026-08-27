@@ -9,6 +9,7 @@
 #include <iostream>
 #include <sstream>
 #include "logger.hpp"
+#include "helper/info/console.hpp"
 
 #include <atomic>
 
@@ -62,7 +63,13 @@ namespace rtype {
 
     void Shell::stop()
     {
+        if (shouldStop)
+            return;
         shouldStop = true;
+
+        // the reader thread is parked inside std::getline: it will never see
+        // shouldStop unless the standard input is interrupted
+        exng::console::interruptStdin();
     }
 
     std::vector<std::pair<std::string, std::function<void(std::vector<std::string>)>>> Shell::getCommands() const

@@ -60,6 +60,18 @@ In the vast expanse of the cosmos, where the boundaries between reality and the 
 
 Once you have downloaded the latest release [here](https://github.com/EpitechPromo2026/B-CPP-500-STG-5-2-rtype-julian.lambert/releases), you can start your R-Type gaming experience.
 
+The archive contains both binaries and the `asset/` folder. Keep them together:
+the game locates its assets relative to the executable, so it can be started
+from anywhere, double click included.
+
+1. Start `r-type_server`. A console opens and it listens on the port set in
+   `config.ini` (`4040` by default).
+2. Start `r-type_client`, type the server IP and port in the menu, then click
+   **Play**. Both fields are pre-filled with `127.0.0.1` / `4040` for a game on
+   the same machine.
+
+Up to 5 players can share the same server.
+
 ### **Controls**
 
 -   **Movement:**
@@ -68,10 +80,82 @@ Once you have downloaded the latest release [here](https://github.com/EpitechPro
 -   **Shooting:**
     
     -   **Spacebar:** Press the spacebar to fire projectiles and attack enemies. Use this to defend yourself and destroy obstacles in your path.
+-   **Display:**
+
+    -   **F11:** Toggle fullscreen.
+
+### **Server console**
+
+The server reads commands on its standard input:
+
+| Command | Effect                      |
+|---------|-----------------------------|
+| `help`  | List the available commands |
+| `stop`  | Stop the server cleanly     |
+
+`Ctrl+C`, or closing the console window, also shuts it down cleanly.
 
 ***
 
 ## **For developers**
+
+### **Build from source**
+
+The only dependency is SFML 2.6, and CMake downloads and builds it through
+`FetchContent`: nothing to install by hand besides a compiler and CMake 3.16+.
+
+**Windows** (MinGW-w64, what the CI uses):
+
+```sh
+cmake -G "MinGW Makefiles" -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+```
+
+Ninja works too and is noticeably faster:
+
+```sh
+cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+```
+
+**Linux:**
+
+```sh
+sudo apt install cmake g++ libxrandr-dev libxcursor-dev libxi-dev libudev-dev                  libfreetype-dev libflac-dev libvorbis-dev libgl1-mesa-dev
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+```
+
+The first configure clones SFML, so it takes a couple of minutes; later builds
+reuse it.
+
+Both binaries are copied to the repository root once built:
+
+```sh
+./r-type_server      # then, in another terminal
+./r-type_client
+```
+
+### **Packaging**
+
+```sh
+cd build && cpack
+```
+
+Produces `build/package/r-type-<version>.zip` on Windows and `.tar.gz` on
+Linux, containing the binaries, `asset/` and `config.ini`.
+
+### **Configuration**
+
+`config.ini` (JSON despite the extension) sits next to the binaries:
+
+| Key              | Meaning                        | Default |
+|------------------|--------------------------------|---------|
+| `port`           | UDP port the server listens on | `4040`  |
+| `net_tickrate`   | State broadcasts per second    | `30`    |
+| `logic_tickrate` | Simulation steps per second    | `60`    |
+
+A missing or invalid file is replaced by the defaults and rewritten.
 
 ### **Documentation**
 

@@ -12,12 +12,14 @@ namespace exng::net {
 
     UDPServer::~UDPServer()
     {
-        m_socket.unbind();
+        // stop the thread before closing the socket it is reading from
+        m_shouldClose = true;
         if (m_thread.joinable())
             m_thread.join();
+        m_socket.unbind();
     }
 
-    void UDPServer::handleIncomingData() {
+    bool UDPServer::handleIncomingData() {
         sf::IpAddress sender;
         unsigned short port;
         char data[1000];
@@ -31,7 +33,7 @@ namespace exng::net {
 
             if (!packet.verifyChecksum()) {
                 logger::warn() << "Packet checksum failed, ignoring packet";
-                return;
+                return true;
             }
 
             // if the packet only contains an id, it's an acknowledgement
@@ -39,7 +41,7 @@ namespace exng::net {
                 uint16_t packetId;
                 packet >> packetId;
                 m_unacknowledgedPackets.erase(packetId);
-                return;
+                return true;
             }
 
             // exctract the packet header
@@ -63,7 +65,7 @@ namespace exng::net {
                         auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
                         if (diff.count() < m_acknowledgmenTimeout.count()) {
                             // Ignore the packet
-                            return;
+                            return true;
                         }
                     }
 
@@ -78,9 +80,11 @@ namespace exng::net {
                 logger::error() << "Unknown message type " << static_cast<int>(messageType);
             }
 
+            return true;
         } else if (status == sf::Socket::Error) {
             //logger::error() << "Error receiving data";
         }
+        return false;
     }
 
     void UDPServer::notifyPacket(Packet &packet)
@@ -265,15 +269,26 @@ namespace exng::net {
 
     void UDPServer::run()
     {
+        float sinceLastTick = 0.f;
+
         while (!m_shouldClose) {
             m_chrono.update();
-            handleIncomingData();
+            sinceLastTick += m_chrono.getFrameDt().asSeconds();
 
-            if (m_chrono.getElapsedTime().asSeconds() > m_tickRate) {
+            // drain everything the socket has for us, not a single datagram
+            // per iteration
+            for (int i = 0; i < 64 && handleIncomingData(); ++i)
+                ;
+
+            if (sinceLastTick >= m_tickRate) {
+                sinceLastTick = 0.f;
                 handleOutgoingData();
             }
 
             cleanupRecentlyReceivedPackets();
+
+            // the socket is non blocking: yield instead of burning a core
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 
@@ -282,7 +297,13 @@ namespace exng::net {
         Packet packet;
         packet << messageType;
         notifyPacket(packet);
+
+        // the goodbye packet has only been queued: stop the worker, then flush
+        // it from here, otherwise clients never learn that the server is gone
         m_shouldClose = true;
+        if (m_thread.joinable())
+            m_thread.join();
+        handleOutgoingData();
     }
 
     void UDPServer::setAcknowledgementTimeout(std::chrono::milliseconds timeout)

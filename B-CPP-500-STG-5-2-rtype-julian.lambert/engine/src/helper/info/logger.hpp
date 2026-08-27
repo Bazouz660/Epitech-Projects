@@ -21,6 +21,7 @@
 #include <ostream>
 
 #include "log_stream.hpp"
+#include "console.hpp"
 
 namespace exng {
 
@@ -31,44 +32,44 @@ namespace exng {
     public:
 
         static void log(const std::string& message) {
-            getInstance().logImpl("\033[37m\e[1m[LOG]\033[0m\e[0m " + message);
+            getInstance().logImpl("\033[37m\033[1m[LOG]\033[0m\033[0m " + message);
         }
 
         static void debug(const std::string& message) {
-            getInstance().logImpl("\033[36m\e[1m[DEBUG]\033[0m\e[0m " + message);
+            getInstance().logImpl("\033[36m\033[1m[DEBUG]\033[0m\033[0m " + message);
         }
 
 
         static void warn(const std::string& message) {
-            getInstance().logImpl("\033[33m\e[1m[WARN]\033[0m\e[0m " + message);
+            getInstance().logImpl("\033[33m\033[1m[WARN]\033[0m\033[0m " + message);
         }
 
         static void error(const std::string& message) {
-            getInstance().logImpl("\033[31m\e[1m[ERROR]\033[0m\e[0m " + message);
+            getInstance().logImpl("\033[31m\033[1m[ERROR]\033[0m\033[0m " + message);
         }
 
         static void success(const std::string& message) {
-            getInstance().logImpl("\033[32m\e[1m[SUCCESS]\033[0m\e[0m " + message);
+            getInstance().logImpl("\033[32m\033[1m[SUCCESS]\033[0m\033[0m " + message);
         }
 
         static log_stream log() {
-            return log_stream(getInstance(), "\033[37m\e[1m[LOG]\033[0m\e[0m");
+            return log_stream(getInstance(), "\033[37m\033[1m[LOG]\033[0m\033[0m");
         }
 
         static log_stream debug() {
-            return log_stream(getInstance(), "\033[36m\e[1m[DEBUG]\033[0m\e[0m");
+            return log_stream(getInstance(), "\033[36m\033[1m[DEBUG]\033[0m\033[0m");
         }
 
         static log_stream warn() {
-            return log_stream(getInstance(), "\033[33m\e[1m[WARN]\033[0m\e[0m");
+            return log_stream(getInstance(), "\033[33m\033[1m[WARN]\033[0m\033[0m");
         }
 
         static log_stream error() {
-            return log_stream(getInstance(), "\033[31m\e[1m[ERROR]\033[0m\e[0m");
+            return log_stream(getInstance(), "\033[31m\033[1m[ERROR]\033[0m\033[0m");
         }
 
         static log_stream success() {
-            return log_stream(getInstance(), "\033[32m\e[1m[SUCCESS]\033[0m\e[0m");
+            return log_stream(getInstance(), "\033[32m\033[1m[SUCCESS]\033[0m\033[0m");
         }
 
     private:
@@ -85,6 +86,7 @@ namespace exng {
         std::mutex conditionMtx;
 
         logger() : stopFlag(false) {
+            console::enableAnsiSequences();
             loggerThread = std::thread(&logger::logMessages, this);
         }
 

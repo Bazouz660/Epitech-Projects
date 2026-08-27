@@ -14,6 +14,8 @@
 #include "core/gui/Container.hpp"
 #include "core/gui/LayerBackground.hpp"
 
+#include <atomic>
+
 namespace rtype::scene {
     class MainMenu : public ANetScene {
         public:
@@ -32,13 +34,38 @@ namespace rtype::scene {
             void onExit() override;
 
         private:
+            // What the status line under the buttons currently shows. Set from
+            // the network thread, read from the game thread, hence the atomic.
+            enum class Status {
+                Idle,
+                Connecting,
+                Refused,
+                TimedOut,
+                BadAddress,
+                BadPort
+            };
+
             void createGUI();
+            void createSettingsGUI();
+
+            // starts a connection attempt from the content of the input boxes
+            void onPlayClicked();
+
+            void refreshStatusLabel();
+            void refreshVolumeLabel();
 
             float m_connectionTimeout = 5.f;
             float m_connectionTimer = 0.f;
             bool m_waitingForConnection = false;
 
+            std::atomic<Status> m_status = Status::Idle;
+            Status m_displayedStatus = Status::Idle;
+
+            bool m_settingsOpen = false;
+            float m_musicVolume = 100.f;
+
             exng::gui::Container m_guiContainer;
+            exng::gui::Container m_settingsContainer;
             exng::gui::LayerBackground m_background;
     };
 }

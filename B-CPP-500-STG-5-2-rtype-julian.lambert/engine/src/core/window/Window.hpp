@@ -24,10 +24,27 @@ namespace exng {
         Window();
         ~Window();
 
-        // Create the window
+        // Create the window.
+        // `size` is the resolution the game draws at; the actual window is
+        // shrunk to fit the desktop when needed, the drawing resolution being
+        // preserved through a letterboxed view.
         void create(const std::string& title, const Vector2u& size, bool fullscreen = false);
 
+        // Set the window icon from an image file (silently ignored if missing)
+        void setIcon(const std::string& path);
+
+        // Toggle between fullscreen and windowed mode, keeping title and size
+        void setFullscreen(bool fullscreen);
+        bool isFullscreen() const;
+
         bool pollEvent(sf::Event& event);
+
+        // Resolution the game logic draws at, whatever the real window size is
+        Vector2u getRenderSize() const;
+
+        // Convert window pixel coordinates (as found in mouse events) into the
+        // coordinates used by the game, accounting for scaling and letterboxing
+        Vector2f mapPixelToCoords(int x, int y) const;
 
         // Destroy the window
         void close();
@@ -60,8 +77,19 @@ namespace exng {
         sf::RenderWindow& getHandle();
 
     private:
-        sf::RenderWindow m_window;
+        void applyLetterboxView();
 
+        // switching between windowed and fullscreen recreates the underlying
+        // window, so everything set on it has to be remembered and reapplied
+        void applyWindowSettings();
+
+        sf::RenderWindow m_window;
+        std::string m_title;
+        std::string m_iconPath;
+        Vector2u m_renderSize = {1920, 1080};
+        bool m_fullscreen = false;
+        unsigned int m_framerateLimit = 0;
+        bool m_verticalSync = false;
     };
 } // namespace exng
 

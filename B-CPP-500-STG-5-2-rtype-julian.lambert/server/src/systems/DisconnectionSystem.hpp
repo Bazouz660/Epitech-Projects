@@ -32,7 +32,10 @@ namespace rtype::sys
             void update(exng::net::UDPServer& server, exng::SafeDequeue<ClientInfo>& disconnectionQueue, exng::SafeDequeue<exng::Entity>& entitiesToDestroy)
             {
                 while (!disconnectionQueue.empty()) {
+                    // pop first: a request coming from a client we have no
+                    // entity for would otherwise keep the loop spinning forever
                     auto client = disconnectionQueue.front();
+                    disconnectionQueue.pop();
 
                     for (auto entity : mEntities) {
                         auto& networdID = mCoordinator.getComponent<comp::NetworkIdentity>(entity);
@@ -46,7 +49,7 @@ namespace rtype::sys
                         exng::net::Packet response;
                         response << MessageType::Disconnection << entity;
                         server.reliableNotifyPacket(response);
-                        disconnectionQueue.pop();
+                        break;
                     }
                 }
             }

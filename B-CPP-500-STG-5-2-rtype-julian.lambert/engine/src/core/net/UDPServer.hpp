@@ -44,7 +44,8 @@ public:
     std::chrono::milliseconds getAcknowledgementTimeout() const;
 
     // handle incoming data, this will call the appropriate packet handler for the received message type
-    void handleIncomingData();
+    // returns true when a datagram was actually processed
+            bool handleIncomingData();
 
     // handle outgoing data, this will send all the packets that need to be sent
     void handleOutgoingData();

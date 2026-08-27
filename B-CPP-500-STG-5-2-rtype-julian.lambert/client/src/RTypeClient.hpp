@@ -67,6 +67,12 @@ public:
 
         void runGame();
         void runNetwork();
+
+        // closes the window and notifies the server, exactly once
+        void requestClose();
+
+        // brings the mouse coordinates of an event back into game coordinates
+        void remapMouseCoordinates(sf::Event &event);
 };
 
 }

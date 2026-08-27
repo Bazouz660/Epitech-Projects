@@ -11,6 +11,8 @@
 #include "core/resource_manager/music_manager/MusicManager.hpp"
 #include "core/resource_manager/ResourceManager.hpp"
 #include "core/gui/ProgressBar.hpp"
+#include "core/gui/Button.hpp"
+#include "core/gui/Label.hpp"
 #include "helper/info/context.hpp"
 
 #include "client/src/entityConstructors.hpp"
@@ -72,6 +74,7 @@ namespace rtype::scene {
         m_entityFactory.registerConstructor(EntityType::Snake, constructors::createSnake);
 
         createGUI();
+        createGameOverGUI();
     }
 
     void Game::onEnter()
@@ -191,22 +194,77 @@ namespace rtype::scene {
         m_guiContainer.addComponent(lifebar);
     }
 
+    void Game::createGameOverGUI()
+    {
+        auto res = exng::context::getTargetResolution();
+
+        auto title = std::make_shared<exng::gui::Label>(
+            sf::Vector2f(res.x / 2.f, res.y / 2.f - 120.f),
+            "GAME OVER",
+            72);
+        title->getText().setFillColor(sf::Color(230, 90, 90));
+        title->centerOrigin();
+
+        auto backButton = std::make_shared<exng::gui::Button>(
+            sf::Vector2f(300, 50),
+            sf::Vector2f(res.x / 2.f, res.y / 2.f + 40.f),
+            "Back to menu",
+            [this]() { this->backToMenu(); });
+
+        auto quitButton = std::make_shared<exng::gui::Button>(
+            sf::Vector2f(300, 50),
+            sf::Vector2f(res.x / 2.f, res.y / 2.f + 110.f),
+            "Quit",
+            []() { exng::context::requestQuit(); });
+
+        m_gameOverContainer.addComponent(title);
+        m_gameOverContainer.addComponent(backButton);
+        m_gameOverContainer.addComponent(quitButton);
+    }
+
+    void Game::backToMenu()
+    {
+        // tell the server we are leaving, then let the menu take over: the
+        // packet is flushed by the network thread on its next tick
+        if (m_UDPclient.isConnected())
+            m_UDPclient.disconnect(rtype::MessageType::DisconnectionRequest);
+        m_UDPclient.setConnected(false);
+
+        m_sceneManager.switchScene("MainMenu");
+    }
+
     void Game::processEvents(sf::Event& event)
     {
-        if (m_alive)
+        if (m_alive) {
             processNetKeyEvents(event);
-        m_guiContainer.handleEvent(event);
+            m_guiContainer.handleEvent(event);
+        } else {
+            m_gameOverContainer.handleEvent(event);
+        }
     }
 
     void Game::update(float dt)
     {
+        // the server went away while we were playing: same end screen
+        if (m_serverStopped)
+            m_alive = false;
+
         m_background.update(dt);
         m_foreground.update(dt);
 
-        m_guiContainer.getComponent<exng::gui::ProgressBar>(0)->setProgress(
-            static_cast<float>(m_playerHp) / static_cast<float>(m_playerMaxHp)
-        );
-        m_guiContainer.update();
+        if (m_alive) {
+            int maxHp = m_playerMaxHp;
+            m_guiContainer.getComponent<exng::gui::ProgressBar>(0)->setProgress(
+                maxHp > 0 ? static_cast<float>(m_playerHp) / static_cast<float>(maxHp) : 0.f
+            );
+            m_guiContainer.update();
+        } else {
+            m_gameOverContainer.update();
+        }
+
+        // the world keeps being simulated once we are dead: entities the
+        // server destroys still have to be reaped, otherwise the coordinator
+        // would fill up while the end screen is shown
 
         m_transformSystem->update();
         m_aabbSystem->update();
@@ -226,7 +284,7 @@ namespace rtype::scene {
                     entityId = m_clientToServerEntities.at(id);
                 } catch (std::exception &e) {
                     exng::logger::warn() << "Received destruction for unknown entity " << id;
-                    return;
+                    continue; // one unknown id must not stall the rest of the queue
                 }
             }
 
@@ -248,7 +306,7 @@ namespace rtype::scene {
                 m_clientToServerEntities.erase(id);
                 m_coordinator.destroyEntity(entityId);
 
-                if (entityId == *m_playerClientId) {
+                if (m_playerClientId && entityId == *m_playerClientId) {
                     m_alive = false;
                     exng::logger::log() << "Unalived player";
                 }
@@ -261,6 +319,10 @@ namespace rtype::scene {
         m_background.render(target);
         //m_foreground.render(target);
         m_renderSystem->render(target);
-        m_guiContainer.render(target);
+
+        if (m_alive)
+            m_guiContainer.render(target);
+        else
+            m_gameOverContainer.render(target);
     }
 }

@@ -18,25 +18,61 @@
 
 // signal
 #include <csignal>
+#include <thread>
+#include <chrono>
+#include <algorithm>
+
+#ifdef _WIN32
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+        // windows.h defines min/max as macros, which breaks std::min/std::max
+        #define NOMINMAX
+    #endif
+    #include <windows.h>
+#endif
 
 namespace rtype {
 
     std::atomic<bool> shouldClose = false;
     std::atomic<bool> stoppedFromSignal = false;
 
+    static void requestShutdown()
+    {
+        shouldClose = true;
+        stoppedFromSignal = true;
+    }
+
     static void sigintHandler(int signal)
     {
-        if (signal == SIGINT) {
-            shouldClose = true;
-            stoppedFromSignal = true;
-            std::cin.setstate(std::ios_base::eofbit);
+        if (signal == SIGINT)
+            requestShutdown();
+    }
+
+#ifdef _WIN32
+    // The CRT SIGINT emulation does not cover every way a console window can
+    // go away (close button, logoff, ...): handle those too.
+    static BOOL WINAPI consoleCtrlHandler(DWORD type)
+    {
+        switch (type) {
+            case CTRL_C_EVENT:
+            case CTRL_BREAK_EVENT:
+            case CTRL_CLOSE_EVENT:
+            case CTRL_LOGOFF_EVENT:
+            case CTRL_SHUTDOWN_EVENT:
+                requestShutdown();
+                return TRUE;
+            default:
+                return FALSE;
         }
     }
+#endif
 
     void RTypeServer::loadConfig()
     {
         // define default values
-        m_config.setDefaultSetting("port", 5000)
+        m_config.setDefaultSetting("port", 4040)
                 .setDefaultSetting("net_tickrate", 30)
                 .setDefaultSetting("logic_tickrate", 60);
 
@@ -161,6 +197,9 @@ namespace rtype {
     {
         // signal handling
         signal(SIGINT, sigintHandler);
+    #ifdef _WIN32
+        SetConsoleCtrlHandler(consoleCtrlHandler, TRUE);
+    #endif
 
         // shell commands initialization
         registerCommands();
@@ -183,43 +222,54 @@ namespace rtype {
         exng::logger::debug() << "sent server stopped message";
         m_shell.stop();
         exng::logger::log() << "Server stopped";
-        if (stoppedFromSignal) {
-            exng::logger::log() << "Press enter to exit";
-        }
     }
 
     void RTypeServer::runLogic()
     {
+        // both rates come from the config file: the simulation is stepped at
+        // logic_tickrate, the state is broadcast at net_tickrate
+        const float logicTickRate = 1.f / static_cast<float>(std::max(1, m_config.getSetting<int>("logic_tickrate")));
+        const float netTickRate = m_udpServer.getTickRate();
+
+        float logicTimer = 0.f;
+
         while (!shouldClose) {
             // update clocks
             m_logicChrono.update();
             float dt = m_logicChrono.getFrameDt().asSeconds();
 
-            // send periodic network data
+            logicTimer += dt;
             m_networkTimer += dt;
-            if (m_networkTimer > m_udpServer.getTickRate()) {
 
+            if (logicTimer >= logicTickRate) {
                 if (m_ready) {
-                    m_enemySpawnSystem->update(m_networkTimer, m_udpServer);
-                    m_obstacleBottomSpawnSystem->update(m_networkTimer, m_udpServer);
-                    m_obstacleTopSpawnSystem->update(m_networkTimer, m_udpServer);
+                    m_enemySpawnSystem->update(logicTimer, m_udpServer);
+                    m_obstacleBottomSpawnSystem->update(logicTimer, m_udpServer);
+                    m_obstacleTopSpawnSystem->update(logicTimer, m_udpServer);
                     m_transformSystem->update();
                     m_aabbSystem->update();
-                    m_inputSystem->update(m_networkTimer, m_udpServer);
-                    m_movementSystem->update(m_networkTimer);
+                    m_inputSystem->update(logicTimer, m_udpServer);
+                    m_movementSystem->update(logicTimer);
                     m_playerBoundariesSystem->update();
-                    m_lifetimeSystem->update(m_udpServer, m_networkTimer, m_entitiesToDestroy);
-                    m_damageSystem->update(m_networkTimer, m_entitiesToDestroy);
+                    m_lifetimeSystem->update(m_udpServer, logicTimer, m_entitiesToDestroy);
+                    m_damageSystem->update(logicTimer, m_entitiesToDestroy);
                     m_entityDestroyer->update(m_udpServer, m_entitiesToDestroy, m_destroyMutex);
                 }
 
+                logicTimer = 0.f;
+            }
+
+            // send periodic network data
+            if (m_networkTimer >= netTickRate) {
                 m_sendNetData->update(m_udpServer);
                 m_sendPlayerInfo->update(m_udpServer);
                 m_disconnectionSystem->update(m_udpServer, m_disconnectionQueue, m_entitiesToDestroy);
 
-                m_networkTimer = 0;
+                m_networkTimer = 0.f;
             }
 
+            // without this the loop would spin at 100% of a core between ticks
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 
@@ -237,8 +287,7 @@ namespace rtype {
             m_udpServer.start(m_config.getSetting<unsigned int>("port"));
         } catch (const std::exception &e) {
             exng::logger::error() << e.what();
-            // send sigint to stop the server
-            raise(SIGINT);
+            requestShutdown();
             return;
         }
 

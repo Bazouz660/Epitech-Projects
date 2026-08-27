@@ -9,9 +9,11 @@ dist/
 .vscode/
 .idea/
 *~
-*.ini
+# config.ini is part of the project: only user-specific overrides are ignored
+*.local.ini
 r-type_server
 r-type_client
 r-type_server.exe
 r-type_client.exe
-```
+# copied next to the binaries by the build (comes from SFML's extlibs)
+openal32.dll
