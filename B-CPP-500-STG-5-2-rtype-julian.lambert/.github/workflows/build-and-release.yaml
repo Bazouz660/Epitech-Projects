@@ -1,0 +1,122 @@
+name: Build and Package
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: choco install cmake
+
+      - name: Install MinGW msvcrt
+        shell: pwsh
+        run: |
+          $url = "https://github.com/niXman/mingw-builds-binaries/releases/download/13.2.0-rt_v11-rev0/x86_64-13.2.0-release-win32-seh-msvcrt-rt_v11-rev0.7z"
+          $output = "mingw.7z"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          7z x $output -oC:\mingw
+          Remove-Item $output
+
+      - name: Add MinGW to PATH
+        shell: pwsh
+        run: |
+          $env:Path += ";C:\mingw\mingw64\bin"
+          [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
+
+      - name: Configure CMake
+        run: cmake -G "MinGW Makefiles" -S . -B build
+
+      - name: Build Project
+        run: cmake --build build --parallel 4 --config Release
+
+      - name: Package Project
+        run: cd build && cpack && cd ..
+
+      - name: List build output
+        run: ls -R build/package
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: package
+          path: build/package/*
+
+  create-release:
+    needs: [build-windows]
+    runs-on: ubuntu-latest
+    if : github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: package
+          path: build/package
+
+      - name: Print working directory
+        run: pwd
+
+      - name: List files in working directory
+        run: ls -R
+
+      - name: Get project version
+        id: get_version
+        run: |
+          echo "::set-output name=version_major::$(grep -oP 'set\(PROJECT_VERSION_MAJOR \K[^ )]*' CMakeLists.txt)"
+          echo "::set-output name=version_minor::$(grep -oP 'set\(PROJECT_VERSION_MINOR \K[^ )]*' CMakeLists.txt)"
+          echo "::set-output name=version_patch::$(grep -oP 'set\(PROJECT_VERSION_PATCH \K[^ )]*' CMakeLists.txt)"
+        shell: bash
+
+      - name: Set project version
+        id: set_version
+        run: echo "::set-output name=version::${{ steps.get_version.outputs.version_major }}.${{ steps.get_version.outputs.version_minor }}.${{ steps.get_version.outputs.version_patch }}"
+        shell: bash
+
+      - name: Create tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a v-${{ steps.set_version.outputs.version }} -m "Release v-${{ steps.set_version.outputs.version }}"
+          git push origin v-${{ steps.set_version.outputs.version }}
+        shell: bash
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v-${{ steps.set_version.outputs.version }}
+          release_name: Release v-${{ steps.set_version.outputs.version }}
+          draft: false
+          prerelease: false
+
+      - name: Install Hub
+        run: |
+          wget https://github.com/github/hub/releases/download/v2.14.2/hub-linux-amd64-2.14.2.tgz
+          tar zxvf hub-linux-amd64-2.14.2.tgz
+          sudo ./hub-linux-amd64-2.14.2/install
+        shell: bash
+
+      - name: Upload Release Assets
+        run: |
+          git config --global core.editor true
+          assets=()
+          for asset in build/package/*; do
+            if [ -f "$asset" ]; then
+              assets+=("-a" "$asset")
+            fi
+          done
+          hub release edit "${assets[@]}" "v-${{ steps.set_version.outputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash

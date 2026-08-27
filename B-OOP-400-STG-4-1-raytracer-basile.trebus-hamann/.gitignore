@@ -1,0 +1,23 @@
+## binary
+raytracer
+
+## logs
+log*
+*.log
+
+## images
+*.jpg
+*output
+
+## build files
+*.o
+*.d
+*.a
+*.so
+build
+
+## vgcore
+vgcore*
+
+## vscode files
+.vscode

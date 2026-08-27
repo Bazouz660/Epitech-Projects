@@ -1,0 +1,9 @@
+*.o
+zappy*
+.vscode/
+vgcore.*
+zappy_gui
+zappy_server
+zappy_server_test
+vgcore*
+*.txt

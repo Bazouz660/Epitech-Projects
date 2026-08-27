@@ -1,0 +1,23 @@
+Usage:
+
+      ./my_runner [map] / [-i] / [-h]
+      
+      You can choose to play on a finite and predefined map by
+      entering its path as argument, or you can use -i instead
+      to play infinitely.
+
+      On a map, your goal is to reach the end, where as in
+      infite mode you need to get the furthest possible.
+
+      You need to avoid mines and you can jump on blocks.
+
+Available imputs:
+      
+      Spacebar = Jump / Cancel slide while on the ground
+      Ctrl = Slide, slightly faster than D,
+             use is to jump further or to slide under blocks
+      D = Forward
+      Q = Backward
+      P = Pause
+      Enter = Continue when on end screen
+      Mouse cursor = navigate through menus

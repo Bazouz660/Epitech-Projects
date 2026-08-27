@@ -1,0 +1,11 @@
+Map formatting:
+
+Y 950 is the ground for mines
+The X_POS adds is equal to X_POS + 125 * entities.
+
+LENGH_OF_PLATFORM:X_POS:YPOS
+@LENGH_OF_MINES:X_POS:YPOS-53
+LENGH_OF_PLATFORM:X_POS:YPOS
+LENGH_OF_PLATFORM:X_POS:YPOS
+@LENGH_OF_MINES:X_POS:YPOS-53
+...
